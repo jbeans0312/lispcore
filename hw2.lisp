@@ -79,3 +79,18 @@
     (t (cons (car lst) (insert_elt k (cdr lst))))
   )
 )
+;;;; Question 7
+;;;; Params: A sorted list of integers 'lst' where one integer is out of place
+;;;; Returns: A sorted list 'lst' with the out of place integer properly sorted
+(defun fix_elt (lst)
+  (insert_elt (find_elt lst) (remove_elt (find_elt lst) lst))
+)
+;;;; Question 8
+;;;; Params: Two ordered lists lst1 and lst2
+;;;; Returns: An ordered list consisting of the elements of lst1 and lst2
+(defun enter_elts (lst1 lst2)
+  (cond 
+    ((null lst1) lst2)
+    (t (enter_elts (cdr lst1) (insert_elt (car lst1) lst2)))
+  )
+)
