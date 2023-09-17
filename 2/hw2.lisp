@@ -73,7 +73,7 @@
   (cond
     ((null lst) (list k))
     (
-      (< k (car lst))
+      (<= k (car lst))
       (cons k lst)
     )
     (t (cons (car lst) (insert_elt k (cdr lst))))
