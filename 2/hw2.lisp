@@ -56,16 +56,16 @@
 ;;;; Question 5
 ;;;; Params: A list of integers 'lst' and an integer 'k'
 ;;;; Returns: A list 'lst' with all instances of 'k' removed from the list
-(defun remove_elt (k lst)
-  (cond
-    ((null lst) nil)
-    (
-      (not (= k (car lst)))
-      (cons (car lst) (remove_elt k (cdr lst)))
-    ) 
-    (t (remove_elt k (cdr lst)))
+  (defun remove_elt (k lst)
+    (cond
+      ((null lst) nil)
+      (
+        (not (= k (car lst)))
+        (cons (car lst) (remove_elt k (cdr lst)))
+      ) 
+      (t (remove_elt k (cdr lst)))
+    )
   )
-)
 ;;;; Question 6
 ;;;; Params: A sorted list of integers 'lst' and an integer 'k'
 ;;;; Returns: A list 'lst' with integer 'k' correctly inserted
