@@ -154,11 +154,8 @@
  (setf (get 'X 'closed-list) nil)
  (search_graph 'X)
   )
-     
-                                          
   
-  
- (defun expand_graph
+(defun expand_graph
    (succs parent-node open-closed succ-fn est-goal goal-planet)
 ;(break "entering expand_graph")
         ;; succs is the list of sucessors of parent-node 
@@ -289,7 +286,7 @@
     (cond
         ((null open-list) (list n))
         (
-            (<= 
+            (<=
                 f-n
                 (+
                     (get (car open-list) 'arc-cost)
@@ -298,7 +295,7 @@
             )
             (cons n open-list)
         )
-        (t (cons (car open-list) (insert_elt n (cdr open-list))))
+        (t (cons (car open-list) (place_node_on_open_list n f-n (cdr open-list))))
   )
 )
 
@@ -308,14 +305,18 @@
 ; add n to the open list in the correct position 
 ; return the modified open-closed
 ; YOU MUST WRITE THIS FUNCTION
-    (place_node_on_open_list 
-        n 
-        (+
-            (get n 'arc-cost) 
-            (get n 'cost-estimate-state-to-goal)
-        )
-        (get open-closed 'open-list)
+    (setf (get open-closed 'open-list)
+      (place_node_on_open_list 
+          n 
+          (+
+              (get n 'arc-cost) 
+             (get n 'cost-estimate-state-to-goal)
+          )
+          (get open-closed 'open-list)
+      )
     )
+    open-closed
+    ; ERROR, WE ARE UPDATING OPEN-LIST, BUT NOT OPEN-CLOSED
 ;(break "entering enter_node_on_open_list")
 )
 
@@ -340,14 +341,15 @@
 ;   path to it may have been found, thereby changing its f value
 ; return the revised open list
 ; YOU MUST WRITE THIS FUNCTION
-    (place_node_on_open_list 
-        n
-        (+
-            (get n 'arc-cost)
-            (get n 'cost-estimate-state-to-goal)
-        )
-        (remove_elt n open)
-    )
+  (place_node_on_open_list 
+      n
+      (+
+        (get n 'arc-cost)
+        (get n 'cost-estimate-state-to-goal)
+      )
+      (remove_elt n open)
+  )
+  open
 )
 
 (defun create_node 
@@ -388,19 +390,54 @@
 ; YOU MUST WRITE THIS FUNCTION
 
     ; use action to update action
-    ; get the planet name from action
-    ; use this planet name to update parent
+    ; update parent with new parent
     ; use arccost to update arc-cost
     ; use cost-of-short-path + to update cost-best-path-to-state
+    ; use (get parent 'num-stops +1) to update num-stops
 
     (setf (get n 'action) action)
-    (setf (get n 'parent) (car action))
+    (setf (get n 'parent) parent)
     (setf (get n 'arc-cost) arccost)
     (setf (get n 'cost-best-path-to-state) cost-of-short-path)
-
-    (adjust_open_list n (get open-closed 'open-list))
+    (setf (get n 'num-stops) (+ 1 (get parent 'num-stops)))
+    (setf (get open-closed 'open-list) (adjust_open_list n (get open-closed 'open-list)))
+    open-closed
 )
-    
+
+(defun get_path (node)
+  (cond
+    ((null (get node 'parent)) nil)
+    (t
+      (cons 
+        (get node 'action)
+        (get_path 
+          (intern 
+            (concatenate 
+            'string "Node-" (car (get node 'action))
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+(defun get_total_cost (node)
+  (cond
+    ((null (get node 'parent)) 0)
+    (t (+ 
+      (get node 'arc-cost)
+      (get_total_cost
+        (intern 
+          (concatenate 
+            'string "Node-" (car (get node 'action))
+          )
+        )
+      )
+    ))
+  )
+)
+
 (defun get_path_and_total_cost (node)
 ; node is a node in the graph
 ; return a list consisting of two elements: the path (in terms of actions) 
@@ -410,27 +447,96 @@
 ; use (get node 'action) to recursively backtrack until we have reached the start
 ; we will know we are at the start node if action = nil
 ; keep a running sum of the arc-cost
-; 
-
+  (list (reverse (get_path node)) (get_total_cost node))
 )
 
+(defun sq_diff (pos1 pos2)
+  ; pos1 and pos2 are each integers representing the x, y, or z coordinate of a planet
+  ; return is the squared different between the two positions
+    (let ((diff (- pos2 pos1)))
+        (* diff diff)
+    )
+)
+(defun get_distance (p1 p2)
+  ; p1 and p2 are both strings representing the names of planets, such as "mars", "septer"
+  ; return is the straight line distance between the two planets
+  ; utilizes sq_diff to help with calculations
+    (round (sqrt 
+      (+ 
+        (sq_diff (get (intern p2) 'x-coord) (get (intern p1) 'x-coord))
+        (sq_diff (get (intern p2) 'y-coord) (get (intern p1) 'y-coord))
+        (sq_diff (get (intern p2) 'z-coord) (get (intern p1) 'z-coord))
+      )
+    ))
+)
 
-(defun get_successors_PE (node )
+(defun calc_arc-cost (node succ method)
+; node is the node we are finding the successors of
+; intern-succ is the string representing the name of the successor planet
+; method is the symbol representing the mode of transportation between the two planets
+; CALCULATIONS GUIDE...
+; ROCKET: $500 plus $10 for each million miles between the two planets plus $75 times number of
+; stops made thus far, rounded to an integer
+; LASER:$1000 for each pound that the package weighs plus $1 for each million miles between the two
+; planets
+; TRANSPORTER: $15 for each million miles between the two planets plus $20 for each pound that
+; the package weighs, rounded to an integer
+  (let 
+    ((distance (get_distance (get node 'state) succ)))
+    (cond 
+      ((equal method (intern "ROCKET"))
+        (+ 500 (* 10 distance) (* 75 (get node 'num-stops)))
+      )
+      ((equal method (intern "LASER"))
+        (+ distance (* 1000 (get node 'package-weight)))
+      )
+      ((equal method (intern "TRANSPORTER"))
+        (+ (* 15 distance) (* 20 (get node 'package-weight)))
+      )
+    )
+  )
+)
+
+(defun build_successors (node next-planet)
+  ; node is the node we are collecting the successors of
+  ; next-planet is the (get (intern (get node 'state) 'next-planet))
+  ; return is the list for get_successors_PE
+  (cond 
+    ((null next-planet) nil)
+    (t 
+      (cons 
+        (list 
+          (calc_arc-cost 
+            node 
+            (car (car next-planet))
+            (car (cdr (car next-planet)))
+          )
+          (get node 'state)
+          (car (car next-planet))
+          (car (cdr (car next-planet)))
+        )
+        (build_successors node (cdr next-planet))
+      )
+    )
+  )
+)
+
+(defun get_successors_PE (node)
 ; node is a node 
 ; return a list of the successors of the node, with each successor given as
 ;   a 4-tuple of the form (arc-cost current-planet next-planet means), such as 
 ;   (cost "mars" "venus" ROCKET) 
 ; YOU MUST WRITE THIS FUNCTION
 ;(break "in get_successors_PE")
-  )
-    
+  (build_successors node (get (intern (get node 'state)) 'next-planet))
+)
 
 (defun goal_test_PE? (node goal-planet)
 ; node is a node and goal-planet is a string giving the
 ;    name of the goal planet
 ; return true if the state for this node is goal-planet
 ; YOU MUST WRITE THIS FUNCTION
-
+  (equal (get node 'state) goal-planet)
 )
 
 (defun get_estimate_cost_to_goal_PE (planet goal-planet)
@@ -440,6 +546,6 @@
 ;    between the planets  
 ; YOU MUST WRITE THIS FUNCTION
   ;(break "entering get_estimate_cost_to_goal_PE")
-    50
+  (get_distance planet goal-planet)
 )
 
